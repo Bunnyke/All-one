@@ -5,8 +5,30 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 from gateways import handle_stripe, handle_braintree
 from tools import handle_bin, handle_fake, handle_scr
 
-ADMIN_ID = 123456789  # <-- Replace with your UID
-registered_users = set()
+ADMIN_ID = 5387926427  # <-- Replace with your UID
+
+# ---- Registration System ----
+def load_registered_users(filename="users.txt"):
+    try:
+        with open(filename, "r") as f:
+            return set(int(line.strip()) for line in f if line.strip())
+    except FileNotFoundError:
+        return set()
+
+def save_registered_user(user_id, filename="users.txt"):
+    with open(filename, "a") as f:
+        f.write(f"{user_id}\n")
+
+def remove_registered_user(user_id, filename="users.txt"):
+    users = load_registered_users(filename)
+    users.discard(user_id)
+    with open(filename, "w") as f:
+        for uid in users:
+            f.write(f"{uid}\n")
+    return users
+
+registered_users = load_registered_users()
+
 menu_status = {
     "b3": True,
     "chk": True,
@@ -52,11 +74,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def menu_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global registered_users
     query = update.callback_query
     user_id = query.from_user.id
 
     if query.data == "menu_register":
         registered_users.add(user_id)
+        save_registered_user(user_id)  # Save user to file
         img_url = get_anime_banner()
         await query.message.delete()
         await context.bot.send_photo(
@@ -161,6 +185,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global registered_users
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❗ You are not authorized.")
         return
@@ -173,7 +198,7 @@ async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Invalid user_id.")
         return
     if uid in registered_users:
-        registered_users.remove(uid)
+        registered_users = remove_registered_user(uid)
         await update.message.reply_text(f"✅ User {uid} removed from database.")
     else:
         await update.message.reply_text(f"User {uid} not found in database.")
@@ -195,7 +220,7 @@ async def set_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
-    app = Application.builder().token("YOUR_BOT_TOKEN").build()
+    app = Application.builder().token("8039426526:AAFSqWU-fRl_gwTPqYLK8yxuS0N9at1hC4s").build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(menu_nav))
