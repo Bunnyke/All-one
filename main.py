@@ -38,76 +38,90 @@ menu_status = {
 }
 
 def get_anime_banner():
-    r = requests.get("https://api.waifu.pics/sfw/waifu", timeout=8)
-    return r.json()["url"]
+    try:
+        r = requests.get("https://api.waifu.pics/sfw/waifu", timeout=8)
+        return r.json()["url"]
+    except Exception:
+        return "https://i.waifu.pics/I9ynlMu.jpg"
 
-def main_menu():
+def panel_menu(is_registered):
+    # Row 1: Gateway, Tools, Status
+    # Row 2: Close
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🟢 Gateway", callback_data="menu_gateway")],
-        [InlineKeyboardButton("🛠️ Tools", callback_data="menu_lookup")],
-        [InlineKeyboardButton("📈 Status", callback_data="menu_stats")]
+        [
+            InlineKeyboardButton("🟢 Gateway", callback_data="menu_gateway"),
+            InlineKeyboardButton("🛠️ Tools", callback_data="menu_lookup"),
+            InlineKeyboardButton("📈 Status", callback_data="menu_stats")
+        ],
+        [InlineKeyboardButton("❌ Close", callback_data="menu_close")]
     ])
 
 def reg_menu():
+    # Register + Close always, if not registered
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Register", callback_data="menu_register")]
+        [InlineKeyboardButton("📝 Register", callback_data="menu_register")],
+        [InlineKeyboardButton("❌ Close", callback_data="menu_close")]
     ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     img_url = get_anime_banner()
-    if user_id in registered_users:
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=img_url,
-            caption="<b>Welcome back! Choose an option below:</b>",
-            parse_mode="HTML",
-            reply_markup=main_menu()
-        )
+    is_registered = user_id in registered_users
+
+    caption = f"👋 WELCOME <b>{update.effective_user.first_name or 'User'}</b>\n"
+    if is_registered:
+        caption += "\n✅ <b>Registered Already!</b> Choose an option below:"
+        kb = panel_menu(is_registered)
     else:
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=img_url,
-            caption="✨ <b>Welcome!</b>\n\nPlease register to use this bot.",
-            parse_mode="HTML",
-            reply_markup=reg_menu()
-        )
+        caption += "\n❗ <b>Please register first!</b> Unlock all bot features."
+        kb = reg_menu()
+
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=img_url,
+        caption=caption,
+        parse_mode="HTML",
+        reply_markup=kb
+    )
 
 async def menu_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global registered_users
     query = update.callback_query
     user_id = query.from_user.id
+    is_registered = user_id in registered_users
 
-    if query.data == "menu_register":
-        registered_users.add(user_id)
-        save_registered_user(user_id)  # Save user to file
-        img_url = get_anime_banner()
+    if query.data == "menu_close":
         await query.message.delete()
-        await context.bot.send_photo(
-            chat_id=query.message.chat_id,
-            photo=img_url,
-            caption="✅ <b>Registration complete!</b>\nChoose an option below:",
-            parse_mode="HTML",
-            reply_markup=main_menu()
-        )
         return
 
-    if user_id not in registered_users:
-        await query.answer("❗ Please register first.", show_alert=True)
-        await query.message.delete()
-        img_url = get_anime_banner()
-        await context.bot.send_photo(
-            chat_id=query.message.chat_id,
-            photo=img_url,
-            caption="✨ <b>Welcome!</b>\n\nPlease register to use this bot.",
-            parse_mode="HTML",
-            reply_markup=reg_menu()
-        )
+    if query.data == "menu_register":
+        if not is_registered:
+            registered_users.add(user_id)
+            save_registered_user(user_id)
+            img_url = get_anime_banner()
+            caption = f"👋 WELCOME <b>{query.from_user.first_name or 'User'}</b>\n\n✅ <b>Registration successful!</b> Choose an option below:"
+            # Instantly update panel to menu after registration
+            await query.message.edit_media(
+                media={"type": "photo", "media": img_url}
+            )
+            await query.message.edit_caption(
+                caption=caption,
+                parse_mode="HTML",
+                reply_markup=panel_menu(True)
+            )
+            return
+        else:
+            await query.answer("Already registered!", show_alert=True)
+            return
+
+    if not is_registered:
+        await query.answer("❗ Please register first!", show_alert=True)
         return
 
     if query.data == "menu_gateway":
         gateway_menu = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+            [InlineKeyboardButton("🔙 Back", callback_data="menu_back")],
+            [InlineKeyboardButton("❌ Close", callback_data="menu_close")]
         ])
         gateways_text = (
             f"[ϟ] Name: Braintree Auth\n"
@@ -127,7 +141,8 @@ async def menu_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "menu_lookup":
         tools_menu = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+            [InlineKeyboardButton("🔙 Back", callback_data="menu_back")],
+            [InlineKeyboardButton("❌ Close", callback_data="menu_close")]
         ])
         tools_text = (
             f"[ϟ] Name: BIN Lookup\n"
@@ -150,24 +165,27 @@ async def menu_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "menu_stats":
+        stats_menu = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Back", callback_data="menu_back")],
+            [InlineKeyboardButton("❌ Close", callback_data="menu_close")]
+        ])
         await query.answer()
         await query.edit_message_caption(
             caption="📈 <b>Status</b>\nBot is online!\nMore stats coming soon...",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
-            ])
+            reply_markup=stats_menu
         )
 
     elif query.data == "menu_back":
         img_url = get_anime_banner()
-        await query.message.delete()
-        await context.bot.send_photo(
-            chat_id=query.message.chat_id,
-            photo=img_url,
-            caption="<b>Welcome! Choose an option below 👇</b>",
+        caption = f"👋 WELCOME <b>{query.from_user.first_name or 'User'}</b>\n\n✅ <b>Registered Already!</b> Choose an option below:"
+        await query.message.edit_media(
+            media={"type": "photo", "media": img_url}
+        )
+        await query.message.edit_caption(
+            caption=caption,
             parse_mode="HTML",
-            reply_markup=main_menu()
+            reply_markup=panel_menu(True)
         )
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
