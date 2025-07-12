@@ -5,7 +5,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 from gateways import handle_stripe, handle_braintree
 from tools import handle_bin, handle_fake, handle_scr
 
-ADMIN_ID = 5387926427  # <-- Replace with your UID
+ADMIN_ID = 5387926427  # <-- Set your Telegram user ID here
 
 # ---- Registration System ----
 def load_registered_users(filename="users.txt"):
@@ -44,9 +44,11 @@ def get_anime_banner():
     except Exception:
         return "https://i.waifu.pics/I9ynlMu.jpg"
 
-def panel_menu(is_registered):
-    # Row 1: Gateway, Tools, Status
-    # Row 2: Close
+def username_fancy(name):
+    # Bold, spaced-out, all-caps style for name
+    return " ".join(f"<b>{c.upper()}</b>" for c in (name or "User"))
+
+def panel_menu():
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🟢 Gateway", callback_data="menu_gateway"),
@@ -57,38 +59,49 @@ def panel_menu(is_registered):
     ])
 
 def reg_menu():
-    # Register + Close always, if not registered
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📝 Register", callback_data="menu_register")],
         [InlineKeyboardButton("❌ Close", callback_data="menu_close")]
     ])
 
+async def send_main_panel(context, chat_id, username, is_registered):
+    banner = get_anime_banner()
+    if is_registered:
+        text = (
+            f"🌸 <b>Welcome back, {username}!</b>\n\n"
+            "✅ <b>You're now a verified user!</b>\n"
+            "Choose a feature below to explore the bot 🚀\n\n"
+            "✨ Have fun!"
+        )
+        reply_markup = panel_menu()
+    else:
+        text = (
+            f"👋 <b>WELCOME {username}!</b>\n\n"
+            "🔒 <b>Registration Required!</b>\n"
+            "To unlock all features, please tap <b>Register</b> below.\n\n"
+            "🛡️ It's quick and safe — join our community now!"
+        )
+        reply_markup = reg_menu()
+    await context.bot.send_photo(
+        chat_id=chat_id,
+        photo=banner,
+        caption=text,
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    img_url = get_anime_banner()
     is_registered = user_id in registered_users
-
-    caption = f"👋 WELCOME <b>{update.effective_user.first_name or 'User'}</b>\n"
-    if is_registered:
-        caption += "\n✅ <b>Registered Already!</b> Choose an option below:"
-        kb = panel_menu(is_registered)
-    else:
-        caption += "\n❗ <b>Please register first!</b> Unlock all bot features."
-        kb = reg_menu()
-
-    await context.bot.send_photo(
-        chat_id=update.effective_chat.id,
-        photo=img_url,
-        caption=caption,
-        parse_mode="HTML",
-        reply_markup=kb
-    )
+    username = username_fancy(update.effective_user.first_name)
+    await send_main_panel(context, update.effective_chat.id, username, is_registered)
 
 async def menu_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global registered_users
     query = update.callback_query
     user_id = query.from_user.id
     is_registered = user_id in registered_users
+    username = username_fancy(query.from_user.first_name)
 
     if query.data == "menu_close":
         await query.message.delete()
@@ -98,17 +111,8 @@ async def menu_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not is_registered:
             registered_users.add(user_id)
             save_registered_user(user_id)
-            img_url = get_anime_banner()
-            caption = f"👋 WELCOME <b>{query.from_user.first_name or 'User'}</b>\n\n✅ <b>Registration successful!</b> Choose an option below:"
-            # Instantly update panel to menu after registration
-            await query.message.edit_media(
-                media={"type": "photo", "media": img_url}
-            )
-            await query.message.edit_caption(
-                caption=caption,
-                parse_mode="HTML",
-                reply_markup=panel_menu(True)
-            )
+            await query.message.delete()
+            await send_main_panel(context, query.message.chat_id, username, True)
             return
         else:
             await query.answer("Already registered!", show_alert=True)
@@ -177,16 +181,10 @@ async def menu_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "menu_back":
-        img_url = get_anime_banner()
-        caption = f"👋 WELCOME <b>{query.from_user.first_name or 'User'}</b>\n\n✅ <b>Registered Already!</b> Choose an option below:"
-        await query.message.edit_media(
-            media={"type": "photo", "media": img_url}
-        )
-        await query.message.edit_caption(
-            caption=caption,
-            parse_mode="HTML",
-            reply_markup=panel_menu(True)
-        )
+        await query.message.delete()
+        await send_main_panel(context, query.message.chat_id, username, True)
+
+# --- Admin panel and status remains as before ---
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
