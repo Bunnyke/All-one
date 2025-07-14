@@ -2,7 +2,7 @@ import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-from gateways import handle_stripe_Auth, handle_braintree
+from gateways import handle_Stripe_Auth, handle_braintree
 from tools import handle_bin, handle_fake, handle_scr
 
 ADMIN_ID = 5387926427  # <-- Set your Telegram user ID here
